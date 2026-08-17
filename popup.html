@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Calendar LinkedIn Lookup</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <img src="icons/icon48.png" alt="" width="28" height="28" />
+      <div>
+        <h1>Calendar LinkedIn</h1>
+        <p>Click behavior</p>
+      </div>
+    </header>
+
+    <label class="row master">
+      <div>
+        <strong>Enable extension</strong>
+        <span>Show LinkedIn icons next to Calendar contacts</span>
+      </div>
+      <input type="checkbox" id="enabled" />
+    </label>
+
+    <fieldset id="features">
+      <legend>On icon click</legend>
+
+      <label class="row">
+        <div>
+          <strong>Side panel with embed</strong>
+          <span>Open LinkedIn search beside Calendar</span>
+        </div>
+        <input type="radio" name="clickTarget" value="sidePanel" />
+      </label>
+
+      <label class="row">
+        <div>
+          <strong>New tab</strong>
+          <span>Open LinkedIn search in a new browser tab</span>
+        </div>
+        <input type="radio" name="clickTarget" value="newTab" />
+      </label>
+    </fieldset>
+
+    <p class="hint" id="status" aria-live="polite"></p>
+    <script src="settings.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

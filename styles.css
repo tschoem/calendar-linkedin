@@ -1,0 +1,36 @@
+.cli-linkedin-link {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 8px;
+  vertical-align: middle;
+  flex-shrink: 0;
+  border-radius: 2px;
+  text-decoration: none !important;
+  opacity: 0.9;
+  position: relative;
+  z-index: 5;
+  cursor: pointer;
+  float: none;
+}
+
+.cli-linkedin-link:hover {
+  opacity: 1;
+}
+
+.cli-linkedin-link svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  pointer-events: none;
+}
+
+/* Keep icon on the same row as the guest name */
+.ddPise .cli-linkedin-link,
+.SDqFWd + .cli-linkedin-link,
+.CVKLNd .cli-linkedin-link {
+  display: inline-flex !important;
+  margin-left: 8px;
+}

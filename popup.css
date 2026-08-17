@@ -1,0 +1,112 @@
+:root {
+  color-scheme: light;
+  --ink: #1c1f24;
+  --muted: #5c6570;
+  --line: #e4e7eb;
+  --bg: #f7f8fa;
+  --accent: #0a66c2;
+  --card: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  width: 300px;
+  font: 13px/1.4 "Segoe UI", system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  padding: 14px;
+}
+
+header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+header p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.row.master {
+  border-color: #c9ddf2;
+  background: #f3f8fd;
+}
+
+.row strong {
+  display: block;
+  font-size: 13px;
+}
+
+.row span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.row input {
+  margin-top: 2px;
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.row input[type="radio"] {
+  border-radius: 50%;
+}
+
+fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+fieldset:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+legend {
+  padding: 4px 2px 8px;
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.hint {
+  margin: 8px 2px 0;
+  min-height: 1.2em;
+  color: var(--muted);
+  font-size: 11px;
+}
