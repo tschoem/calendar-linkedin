@@ -188,21 +188,43 @@
     }
   }
 
+  function extensionAlive() {
+    try {
+      return Boolean(chrome.runtime?.id);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function openInNewTab(url) {
+    try {
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (_) {}
+  }
+
   function openLookup(payload) {
     const url = payload.url || linkedInSearchUrl(payload.query);
+    if (!url) return;
+
     if (settings.clickTarget === "sidePanel") {
-      chrome.runtime.sendMessage({
-        type: "cli-open-side-panel",
-        payload: {
-          ...payload,
-          url,
-          openedAt: Date.now(),
-          requestId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        },
-      });
+      if (!extensionAlive()) {
+        openInNewTab(url);
+        return;
+      }
+      try {
+        chrome.runtime.sendMessage({ type: "cli-open-linkedin-window", url }, (response) => {
+          if (chrome.runtime.lastError || !response?.ok) {
+            openInNewTab(url);
+          }
+        });
+      } catch (_) {
+        // Extension was reloaded — old content script is dead.
+        openInNewTab(url);
+      }
       return;
     }
-    window.open(url, "_blank", "noopener,noreferrer");
+
+    openInNewTab(url);
   }
 
   function createLink(payload) {
@@ -216,6 +238,7 @@
     a.setAttribute(ATTR, "1");
     a.dataset.cliEmail = payload.email || "";
     a.dataset.cliQuery = payload.query || "";
+    a.dataset.cliExt = chrome.runtime?.id || "";
     a.innerHTML = LINKEDIN_SVG;
 
     a.addEventListener("mousedown", (e) => e.stopPropagation(), true);
@@ -242,15 +265,56 @@
       chip.querySelector(".SDqFWd") ||
       chip.querySelector(".ddPise") ||
       chip.querySelector(".CVKLNd") ||
-      chip
+      null
     );
   }
 
+  // "Meet with…" / people-search pickers — never inject icons there.
+  function isPeoplePickerContext(el) {
+    if (!el) return true;
+
+    const pickerRoot =
+      el.closest('[role="listbox"], [role="dialog"], [role="menu"], [role="combobox"]') ||
+      el.parentElement;
+    if (!pickerRoot) return false;
+
+    const probe = (pickerRoot.innerText || "").slice(0, 800);
+    if (/meet with|search for people/i.test(probe)) return true;
+
+    if (
+      pickerRoot.querySelector?.(
+        'input[placeholder*="Search for people" i], input[aria-label*="Search for people" i], input[placeholder*="Meet with" i]'
+      )
+    ) {
+      return true;
+    }
+
+    // Options inside a listbox that sits under a people-search field.
+    if (el.closest('[role="option"]')) {
+      const scope =
+        el.closest('[role="dialog"]') ||
+        el.closest('[role="listbox"]')?.parentElement ||
+        document.body;
+      if (
+        scope?.querySelector?.(
+          'input[placeholder*="Search for people" i], input[aria-label*="Search for people" i]'
+        )
+      ) {
+        return true;
+      }
+      if (/meet with|search for people/i.test((scope?.innerText || "").slice(0, 400))) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   function placeIcon(chip, link) {
+    // Only place beside a real guest name row — never on avatars / search hits.
     const row = chip.querySelector(".ddPise");
     const name = chip.querySelector(".SDqFWd");
 
-    // Best: append into the flex name row so it stays on one line to the right.
     if (row) {
       row.appendChild(link);
       return true;
@@ -259,17 +323,17 @@
       name.insertAdjacentElement("afterend", link);
       return true;
     }
-    const anchor = findNameAnchor(chip);
-    if (anchor && anchor !== chip) {
-      anchor.insertAdjacentElement("afterend", link);
-      return true;
-    }
-    chip.appendChild(link);
-    return true;
+    return false;
   }
 
   function ensureIcon(chip) {
     if (!featuresActive() || !chip) return;
+    if (!extensionAlive()) return;
+
+    if (isPeoplePickerContext(chip)) {
+      removeIconsIn(chip);
+      return;
+    }
 
     const email = chipEmail(chip);
     if (!email) return;
@@ -277,8 +341,16 @@
     const info = parseEmail(email);
     if (!info) return;
 
+    // Guest event rows have a name structure; skip unknown layouts.
+    if (!findNameAnchor(chip)) {
+      removeIconsIn(chip);
+      return;
+    }
+
     const existing = chip.querySelector(`a[${ATTR}]`);
-    if (existing && existing.dataset.cliEmail === email) {
+    const extId = chrome.runtime.id;
+    // Recreate icons from a previous extension load (stale click handlers).
+    if (existing && existing.dataset.cliEmail === email && existing.dataset.cliExt === extId) {
       chip.setAttribute(CHIP_ATTR, email);
       return;
     }
@@ -300,9 +372,16 @@
 
     const link = createLink(payload);
     try {
-      placeIcon(chip, link);
-      chip.setAttribute(CHIP_ATTR, email);
-    } catch (_) {}
+      if (placeIcon(chip, link)) {
+        chip.setAttribute(CHIP_ATTR, email);
+      } else {
+        link.remove();
+      }
+    } catch (_) {
+      try {
+        link.remove();
+      } catch (__) {}
+    }
   }
 
   function scan(root = document.body) {
@@ -312,6 +391,11 @@
       return;
     }
 
+    // Strip any icons that landed in people-search / Meet with UI.
+    root.querySelectorAll?.(`a[${ATTR}]`).forEach((a) => {
+      if (isPeoplePickerContext(a)) a.remove();
+    });
+
     // One chip = one [data-hovercard-id="email@…"] (or data-email).
     const chips = root.querySelectorAll?.(
       '[data-hovercard-id*="@"], [data-email*="@"]'
@@ -320,6 +404,12 @@
 
     const seen = new Set();
     chips.forEach((el) => {
+      if (isPeoplePickerContext(el)) {
+        const bad = el.closest("[data-hovercard-id], [data-email]") || el;
+        removeIconsIn(bad);
+        return;
+      }
+
       // Use the element that actually owns the email attribute.
       const email =
         (EMAIL_RE.test((el.getAttribute("data-hovercard-id") || "").toLowerCase()) &&
@@ -335,6 +425,11 @@
           ? el
           : el.closest("[data-hovercard-id*='@'], [data-email*='@']") || el;
 
+      if (isPeoplePickerContext(chip)) {
+        removeIconsIn(chip);
+        return;
+      }
+
       // Skip nested duplicates (child matching same email).
       const parentChip = chip.parentElement?.closest?.(
         "[data-hovercard-id*='@'], [data-email*='@']"
@@ -347,8 +442,16 @@
 
     // Remove orphan icons left over from Calendar DOM rebuilds.
     root.querySelectorAll?.(`a[${ATTR}]`).forEach((a) => {
+      if (isPeoplePickerContext(a)) {
+        a.remove();
+        return;
+      }
       const host = a.closest("[data-hovercard-id], [data-email]");
       if (!host) {
+        a.remove();
+        return;
+      }
+      if (isPeoplePickerContext(host) || !findNameAnchor(host)) {
         a.remove();
         return;
       }
@@ -385,13 +488,21 @@
     scheduleScan();
   }
 
+  // Drop any icons left by a previous extension version before first scan.
+  document.querySelectorAll?.(`a[${ATTR}]`).forEach((a) => a.remove());
+  document.querySelectorAll?.(`[${CHIP_ATTR}]`).forEach((el) => el.removeAttribute(CHIP_ATTR));
+
   const getSettings =
     typeof cliGetSettings === "function" ? cliGetSettings : () => Promise.resolve(settings);
 
-  getSettings().then((s) => {
-    applySettings(s);
-    scan(document.body);
-  });
+  getSettings()
+    .then((s) => {
+      applySettings(s);
+      scan(document.body);
+    })
+    .catch(() => {
+      scan(document.body);
+    });
 
   scan(document.body);
 

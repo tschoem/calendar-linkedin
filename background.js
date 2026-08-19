@@ -1,35 +1,12 @@
 importScripts("settings.js");
 
-const FRAME_RULE_ID = 1;
 const CALENDAR_URLS = ["https://calendar.google.com/*"];
+const LINKEDIN_WINDOW_KEY = "cliLinkedInWindowId";
+const CALENDAR_RESTORE_KEY = "cliCalendarRestore";
 
-async function ensureFrameRules() {
-  try {
-    await chrome.declarativeNetRequest.updateDynamicRules({
-      removeRuleIds: [FRAME_RULE_ID],
-      addRules: [
-        {
-          id: FRAME_RULE_ID,
-          priority: 1,
-          action: {
-            type: "modifyHeaders",
-            responseHeaders: [
-              { header: "X-Frame-Options", operation: "remove" },
-              { header: "Content-Security-Policy", operation: "remove" },
-              { header: "Content-Security-Policy-Report-Only", operation: "remove" },
-            ],
-          },
-          condition: {
-            urlFilter: "||linkedin.com^",
-            resourceTypes: ["sub_frame"],
-          },
-        },
-      ],
-    });
-  } catch (err) {
-    console.warn("[CLI] frame rules", err);
-  }
-}
+const SIDE_WIDTH = 440;
+const SIDE_GAP = 8;
+const MIN_CALENDAR_WIDTH = 640;
 
 async function injectIntoTab(tabId) {
   try {
@@ -61,10 +38,6 @@ async function initExtension() {
   } catch (_) {
     await chrome.storage.sync.set({ ...CLI_DEFAULTS });
   }
-  try {
-    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
-  } catch (_) {}
-  await ensureFrameRules();
   await injectIntoOpenCalendarTabs();
 }
 
@@ -73,7 +46,6 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  ensureFrameRules();
   injectIntoOpenCalendarTabs();
 });
 
@@ -83,93 +55,180 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   injectIntoTab(tabId);
 });
 
-function buildPayload(message) {
+async function resolveAnchorWindow(anchorWindowId) {
+  if (anchorWindowId != null) {
+    try {
+      return await chrome.windows.get(anchorWindowId);
+    } catch (_) {}
+  }
+
+  const calendarTabs = await chrome.tabs.query({
+    url: CALENDAR_URLS,
+    active: true,
+  });
+  if (calendarTabs[0]?.windowId != null) {
+    try {
+      return await chrome.windows.get(calendarTabs[0].windowId);
+    } catch (_) {}
+  }
+
+  try {
+    return await chrome.windows.getLastFocused();
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Shrink Calendar to free a strip on the right, then return bounds for the
+ * LinkedIn popup. Original Calendar size is restored when that popup closes.
+ * Coordinates are not clamped — secondary displays often use negative origins.
+ */
+async function layoutBesideCalendar(anchor) {
+  const fallback = {
+    left: 80,
+    top: 40,
+    width: SIDE_WIDTH,
+    height: 900,
+  };
+  if (!anchor?.id) return fallback;
+
+  const session = await chrome.storage.session.get(CALENDAR_RESTORE_KEY);
+  let restore = session[CALENDAR_RESTORE_KEY];
+
+  if (!restore || restore.windowId !== anchor.id) {
+    restore = {
+      windowId: anchor.id,
+      left: anchor.left ?? 0,
+      top: anchor.top ?? 0,
+      width: anchor.width ?? 1200,
+      height: anchor.height ?? 900,
+      state: anchor.state || "normal",
+    };
+    await chrome.storage.session.set({ [CALENDAR_RESTORE_KEY]: restore });
+  }
+
+  const sideTotal = SIDE_WIDTH + SIDE_GAP;
+  const newCalWidth = Math.max(MIN_CALENDAR_WIDTH, restore.width - sideTotal);
+  const freed = restore.width - newCalWidth;
+
+  if (freed >= 120) {
+    try {
+      await chrome.windows.update(anchor.id, {
+        state: "normal",
+        left: restore.left,
+        top: restore.top,
+        width: newCalWidth,
+        height: restore.height,
+      });
+    } catch (err) {
+      console.debug("[CLI] resize calendar", err);
+    }
+
+    return {
+      left: restore.left + newCalWidth + SIDE_GAP,
+      top: restore.top,
+      width: SIDE_WIDTH,
+      height: Math.max(700, restore.height - 40),
+    };
+  }
+
+  // Calendar already too narrow — overlay the right edge instead of shrinking.
   return {
-    name: message.payload?.name || "",
-    company: message.payload?.company || "",
-    email: message.payload?.email || "",
-    query: message.payload?.query || "",
-    url: message.payload?.url || "",
-    openedAt: message.payload?.openedAt || Date.now(),
-    requestId:
-      message.payload?.requestId ||
-      `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    left: (anchor.left || 0) + Math.max(0, (anchor.width || 1200) - SIDE_WIDTH - SIDE_GAP),
+    top: (anchor.top || 0) + 24,
+    width: SIDE_WIDTH,
+    height: Math.max(700, (anchor.height || 900) - 40),
   };
 }
 
-async function notifySidePanel(payload) {
-  // Direct push to an already-open side panel page.
+async function restoreCalendarWindow() {
+  const stored = await chrome.storage.session.get(CALENDAR_RESTORE_KEY);
+  const restore = stored[CALENDAR_RESTORE_KEY];
+  if (!restore?.windowId) return;
+
   try {
-    await chrome.runtime.sendMessage({
-      type: "cli-side-panel-update",
-      payload,
-    });
-  } catch (_) {
-    // No listener yet (panel still opening) — panel will read storage on load.
-  }
+    if (restore.state === "maximized" || restore.state === "fullscreen") {
+      await chrome.windows.update(restore.windowId, { state: restore.state });
+    } else {
+      await chrome.windows.update(restore.windowId, {
+        state: "normal",
+        left: restore.left,
+        top: restore.top,
+        width: restore.width,
+        height: restore.height,
+      });
+    }
+  } catch (_) {}
+
+  await chrome.storage.session.remove(CALENDAR_RESTORE_KEY);
 }
+
+async function openOrFocusLinkedInWindow(url, anchorWindowId) {
+  let bounds = { left: 80, top: 40, width: SIDE_WIDTH, height: 900 };
+
+  try {
+    const anchor = await resolveAnchorWindow(anchorWindowId);
+    bounds = await layoutBesideCalendar(anchor);
+  } catch (err) {
+    console.debug("[CLI] layout", err);
+  }
+
+  const stored = await chrome.storage.session.get(LINKEDIN_WINDOW_KEY);
+  const existingId = stored[LINKEDIN_WINDOW_KEY];
+
+  if (existingId) {
+    try {
+      const win = await chrome.windows.get(existingId);
+      if (win?.id) {
+        await chrome.windows.update(win.id, {
+          focused: true,
+          left: bounds.left,
+          top: bounds.top,
+          width: bounds.width,
+          height: bounds.height,
+        });
+        const tabs = await chrome.tabs.query({ windowId: win.id });
+        if (tabs[0]?.id) await chrome.tabs.update(tabs[0].id, { url });
+        return { ok: true, mode: "reuse" };
+      }
+    } catch (_) {}
+  }
+
+  const win = await chrome.windows.create({
+    url,
+    type: "popup",
+    width: bounds.width,
+    height: bounds.height,
+    left: bounds.left,
+    top: bounds.top,
+    focused: true,
+  });
+
+  if (win?.id) await chrome.storage.session.set({ [LINKEDIN_WINDOW_KEY]: win.id });
+  return { ok: true, mode: "create" };
+}
+
+chrome.windows.onRemoved.addListener(async (windowId) => {
+  const stored = await chrome.storage.session.get(LINKEDIN_WINDOW_KEY);
+  if (stored[LINKEDIN_WINDOW_KEY] === windowId) {
+    await chrome.storage.session.remove(LINKEDIN_WINDOW_KEY);
+    await restoreCalendarWindow();
+  }
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !message.type) return false;
 
-  if (message.type === "cli-open-side-panel") {
-    const tabId = sender.tab?.id;
-    const windowId = sender.tab?.windowId;
-    if (!tabId || !windowId) {
-      sendResponse({ ok: false, error: "No active tab" });
+  if (message.type === "cli-open-linkedin-window") {
+    if (!message.url) {
+      sendResponse({ ok: false, error: "Missing url" });
       return false;
     }
-
-    const payload = buildPayload(message);
-
-    // Must call open() in the gesture turn — ignore "already open" errors later.
-    const openPromise = chrome.sidePanel.open({ windowId }).catch(() => null);
-
-    (async () => {
-      await ensureFrameRules();
-
-      // Persist first so a remount/load can read the latest search.
-      await chrome.storage.session.set({
-        cliSidePanelPayload: payload,
-        cliSidePanelTick: payload.requestId,
-      });
-
-      // Keep/restore our extension page in the side panel (LinkedIn may steal the frame).
-      await chrome.sidePanel.setOptions({
-        tabId,
-        path: "sidepanel.html",
-        enabled: true,
-      });
-
-      await openPromise;
-
-      // Push update to an already-running panel instance.
-      await notifySidePanel(payload);
-
-      // Remount recovery: if the panel just reloaded via setOptions, give it a moment
-      // then push again + ensure storage is readable.
-      setTimeout(() => {
-        notifySidePanel(payload);
-      }, 150);
-
-      sendResponse({ ok: true });
-    })().catch((err) => {
-      sendResponse({ ok: false, error: String(err?.message || err) });
-    });
-
+    openOrFocusLinkedInWindow(message.url, sender.tab?.windowId)
+      .then((result) => sendResponse(result))
+      .catch((err) => sendResponse({ ok: false, error: String(err?.message || err) }));
     return true;
-  }
-
-  if (message.type === "cli-get-side-panel-payload") {
-    chrome.storage.session.get("cliSidePanelPayload").then((data) => {
-      sendResponse({ ok: true, payload: data.cliSidePanelPayload || null });
-    });
-    return true;
-  }
-
-  // Side panel echoes / content ignores.
-  if (message.type === "cli-side-panel-update") {
-    return false;
   }
 
   return false;

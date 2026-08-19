@@ -8,7 +8,7 @@ Open-source Chrome extension that adds a LinkedIn icon next to guests on **Googl
 
 - Detects Calendar guests from hovercard data (`data-hovercard-id`) even when the email isn’t shown
 - Builds a people search from **display name + company** (company from the email domain)
-- Opens results in a **side panel embed** or a **new tab** (configurable)
+- Opens results in a **side window** or a **new tab** (configurable)
 - Can be fully disabled from the extension popup
 
 ## Install (unpacked)
@@ -42,7 +42,7 @@ Click the extension icon in the toolbar:
 | Setting | Description |
 | --- | --- |
 | **Enable extension** | Master switch for icons |
-| **Side panel with embed** | Open LinkedIn search in Chrome’s side panel |
+| **Side window** | Open LinkedIn beside Calendar (full LinkedIn; Connect works) |
 | **New tab** | Open LinkedIn search in a new browser tab |
 
 Side panel and new tab are mutually exclusive (radio options).
@@ -50,19 +50,17 @@ Side panel and new tab are mutually exclusive (radio options).
 ## Permissions
 
 - `storage` — save settings
-- `sidePanel` — open LinkedIn beside Calendar
 - `scripting` — inject into already-open Calendar tabs after install/reload
-- Host access to `calendar.google.com` and `linkedin.com`
+- Host access to `calendar.google.com`
 
 ## Project layout
 
 ```
 manifest.json      Extension manifest (MV3)
-background.js      Service worker (side panel + injection)
+background.js      Service worker (side window + injection)
 content.js         Calendar page script (icons + click handling)
 settings.js        Shared settings helpers
 popup.html/js/css  Toolbar settings UI
-sidepanel.html/js/css  Side panel LinkedIn embed
 styles.css         Icon styles on Calendar
 icons/             Extension icons
 LICENSE            MIT license
@@ -70,7 +68,7 @@ LICENSE            MIT license
 
 ## Notes
 
-- LinkedIn may ask you to sign in inside the side panel embed (third-party cookies / framing limits).
+- LinkedIn opens in a dedicated side window or a new tab so actions like Connect work normally.
 - Calendar’s DOM changes often; if icons are missing, refresh the Calendar tab or reload the extension.
 - This extension does not use the LinkedIn API and does not scrape profiles — it only opens LinkedIn’s people search.
 - Not affiliated with Google or LinkedIn.

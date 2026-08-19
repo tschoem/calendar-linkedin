@@ -1,21 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Calendar LinkedIn Lookup",
-  "version": "1.4.1",
-  "description": "Adds LinkedIn search icons next to Google Calendar contacts. Open in a side-panel embed and/or a new tab.",
+  "version": "1.5.4",
+  "description": "Adds LinkedIn search icons next to Google Calendar contacts. Open in a side window or a new tab.",
   "author": "Thomas Schoemaecker",
   "homepage_url": "https://github.com/tschoem/calendar-linkedin",
-  "permissions": ["storage", "sidePanel", "scripting", "declarativeNetRequestWithHostAccess"],
-  "host_permissions": [
-    "https://calendar.google.com/*",
-    "https://www.linkedin.com/*",
-    "https://linkedin.com/*"
-  ],
+  "permissions": ["storage", "scripting"],
+  "host_permissions": ["https://calendar.google.com/*"],
   "background": {
     "service_worker": "background.js"
-  },
-  "side_panel": {
-    "default_path": "sidepanel.html"
   },
   "action": {
     "default_title": "Calendar LinkedIn Lookup",
