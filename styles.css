@@ -35,7 +35,17 @@
   margin-left: 8px;
 }
 
-/* HubSpot: keep icon inline beside the name / email actions */
+/* HubSpot: force the name control onto one horizontal row with the icon */
+.cli-linkedin-name-host {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  width: auto !important;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
 .cli-linkedin-link--hubspot {
   display: inline-flex !important;
   margin-left: 6px !important;
@@ -43,9 +53,7 @@
   vertical-align: middle !important;
   align-self: center;
   flex-shrink: 0;
-}
-
-[data-cli-hubspot-card] .cli-linkedin-link--hubspot {
+  float: none !important;
   position: relative;
-  top: -1px;
+  top: 0;
 }

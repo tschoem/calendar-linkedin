@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "Calendar LinkedIn Lookup",
-  "version": "1.6.0",
-  "description": "Adds LinkedIn search icons next to contacts in Google Calendar and HubSpot. Open in a side window or a new tab.",
+  "name": "Easy LinkedIn Search",
+  "version": "1.7.0",
+  "description": "LinkedIn search icons next to contacts across apps like Google Calendar and HubSpot. Open in a side window or a new tab.",
   "author": "Thomas Schoemaecker",
-  "homepage_url": "https://github.com/tschoem/calendar-linkedin",
+  "homepage_url": "https://github.com/tschoem/easy-linkedin-search",
   "permissions": ["storage", "scripting"],
   "host_permissions": [
     "https://calendar.google.com/*",
@@ -14,7 +14,7 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Calendar LinkedIn Lookup",
+    "default_title": "Easy LinkedIn Search",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
