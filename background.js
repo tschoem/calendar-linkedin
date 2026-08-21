@@ -1,14 +1,40 @@
 importScripts("settings.js");
 
-const CALENDAR_URLS = ["https://calendar.google.com/*"];
+const SITE_URLS = [
+  "https://calendar.google.com/*",
+  "https://*.hubspot.com/*",
+];
+
+const SITE_INJECT = {
+  calendar: {
+    match: (url) => url.startsWith("https://calendar.google.com/"),
+    files: ["settings.js", "shared.js", "content-calendar.js"],
+  },
+  hubspot: {
+    match: (url) => /^https:\/\/app(-[a-z0-9]+)?\.hubspot\.com\//i.test(url),
+    files: ["settings.js", "shared.js", "content-hubspot.js"],
+  },
+};
+
 const LINKEDIN_WINDOW_KEY = "cliLinkedInWindowId";
-const CALENDAR_RESTORE_KEY = "cliCalendarRestore";
+const HOST_RESTORE_KEY = "cliHostRestore";
 
 const SIDE_WIDTH = 440;
 const SIDE_GAP = 8;
-const MIN_CALENDAR_WIDTH = 640;
+const MIN_HOST_WIDTH = 640;
 
-async function injectIntoTab(tabId) {
+function siteForUrl(url) {
+  if (!url) return null;
+  for (const [id, site] of Object.entries(SITE_INJECT)) {
+    if (site.match(url)) return { id, ...site };
+  }
+  return null;
+}
+
+async function injectIntoTab(tabId, url) {
+  const site = siteForUrl(url);
+  if (!site) return;
+
   try {
     await chrome.scripting.insertCSS({
       target: { tabId },
@@ -19,26 +45,31 @@ async function injectIntoTab(tabId) {
   try {
     await chrome.scripting.executeScript({
       target: { tabId },
-      files: ["settings.js", "content.js"],
+      files: site.files,
     });
   } catch (err) {
     console.debug("[CLI] inject", tabId, err);
   }
 }
 
-async function injectIntoOpenCalendarTabs() {
-  const tabs = await chrome.tabs.query({ url: CALENDAR_URLS });
-  await Promise.all(tabs.map((tab) => (tab.id ? injectIntoTab(tab.id) : null)));
+async function injectIntoOpenSiteTabs() {
+  const tabs = await chrome.tabs.query({ url: SITE_URLS });
+  await Promise.all(
+    tabs.map((tab) => (tab.id && tab.url ? injectIntoTab(tab.id, tab.url) : null))
+  );
 }
 
 async function initExtension() {
   try {
-    const current = await chrome.storage.sync.get(CLI_DEFAULTS);
-    await chrome.storage.sync.set(cliNormalizeSettings(current));
+    const current = await chrome.storage.sync.get(null);
+    await chrome.storage.sync.set(cliNormalizeSettings({ ...CLI_DEFAULTS, ...current }));
   } catch (_) {
-    await chrome.storage.sync.set({ ...CLI_DEFAULTS });
+    await chrome.storage.sync.set({
+      ...CLI_DEFAULTS,
+      apps: { ...CLI_DEFAULTS.apps },
+    });
   }
-  await injectIntoOpenCalendarTabs();
+  await injectIntoOpenSiteTabs();
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -46,13 +77,13 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  injectIntoOpenCalendarTabs();
+  injectIntoOpenSiteTabs();
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status !== "complete") return;
-  if (!tab.url || !tab.url.startsWith("https://calendar.google.com/")) return;
-  injectIntoTab(tabId);
+  if (!tab.url || !siteForUrl(tab.url)) return;
+  injectIntoTab(tabId, tab.url);
 });
 
 async function resolveAnchorWindow(anchorWindowId) {
@@ -62,13 +93,13 @@ async function resolveAnchorWindow(anchorWindowId) {
     } catch (_) {}
   }
 
-  const calendarTabs = await chrome.tabs.query({
-    url: CALENDAR_URLS,
+  const siteTabs = await chrome.tabs.query({
+    url: SITE_URLS,
     active: true,
   });
-  if (calendarTabs[0]?.windowId != null) {
+  if (siteTabs[0]?.windowId != null) {
     try {
-      return await chrome.windows.get(calendarTabs[0].windowId);
+      return await chrome.windows.get(siteTabs[0].windowId);
     } catch (_) {}
   }
 
@@ -80,11 +111,11 @@ async function resolveAnchorWindow(anchorWindowId) {
 }
 
 /**
- * Shrink Calendar to free a strip on the right, then return bounds for the
- * LinkedIn popup. Original Calendar size is restored when that popup closes.
+ * Shrink the host app window to free a strip on the right, then return bounds
+ * for the LinkedIn popup. Original size is restored when that popup closes.
  * Coordinates are not clamped — secondary displays often use negative origins.
  */
-async function layoutBesideCalendar(anchor) {
+async function layoutBesideHost(anchor) {
   const fallback = {
     left: 80,
     top: 40,
@@ -93,8 +124,8 @@ async function layoutBesideCalendar(anchor) {
   };
   if (!anchor?.id) return fallback;
 
-  const session = await chrome.storage.session.get(CALENDAR_RESTORE_KEY);
-  let restore = session[CALENDAR_RESTORE_KEY];
+  const session = await chrome.storage.session.get(HOST_RESTORE_KEY);
+  let restore = session[HOST_RESTORE_KEY];
 
   if (!restore || restore.windowId !== anchor.id) {
     restore = {
@@ -105,12 +136,12 @@ async function layoutBesideCalendar(anchor) {
       height: anchor.height ?? 900,
       state: anchor.state || "normal",
     };
-    await chrome.storage.session.set({ [CALENDAR_RESTORE_KEY]: restore });
+    await chrome.storage.session.set({ [HOST_RESTORE_KEY]: restore });
   }
 
   const sideTotal = SIDE_WIDTH + SIDE_GAP;
-  const newCalWidth = Math.max(MIN_CALENDAR_WIDTH, restore.width - sideTotal);
-  const freed = restore.width - newCalWidth;
+  const newHostWidth = Math.max(MIN_HOST_WIDTH, restore.width - sideTotal);
+  const freed = restore.width - newHostWidth;
 
   if (freed >= 120) {
     try {
@@ -118,22 +149,21 @@ async function layoutBesideCalendar(anchor) {
         state: "normal",
         left: restore.left,
         top: restore.top,
-        width: newCalWidth,
+        width: newHostWidth,
         height: restore.height,
       });
     } catch (err) {
-      console.debug("[CLI] resize calendar", err);
+      console.debug("[CLI] resize host", err);
     }
 
     return {
-      left: restore.left + newCalWidth + SIDE_GAP,
+      left: restore.left + newHostWidth + SIDE_GAP,
       top: restore.top,
       width: SIDE_WIDTH,
       height: Math.max(700, restore.height - 40),
     };
   }
 
-  // Calendar already too narrow — overlay the right edge instead of shrinking.
   return {
     left: (anchor.left || 0) + Math.max(0, (anchor.width || 1200) - SIDE_WIDTH - SIDE_GAP),
     top: (anchor.top || 0) + 24,
@@ -142,9 +172,9 @@ async function layoutBesideCalendar(anchor) {
   };
 }
 
-async function restoreCalendarWindow() {
-  const stored = await chrome.storage.session.get(CALENDAR_RESTORE_KEY);
-  const restore = stored[CALENDAR_RESTORE_KEY];
+async function restoreHostWindow() {
+  const stored = await chrome.storage.session.get(HOST_RESTORE_KEY);
+  const restore = stored[HOST_RESTORE_KEY];
   if (!restore?.windowId) return;
 
   try {
@@ -161,7 +191,7 @@ async function restoreCalendarWindow() {
     }
   } catch (_) {}
 
-  await chrome.storage.session.remove(CALENDAR_RESTORE_KEY);
+  await chrome.storage.session.remove(HOST_RESTORE_KEY);
 }
 
 async function openOrFocusLinkedInWindow(url, anchorWindowId) {
@@ -169,7 +199,7 @@ async function openOrFocusLinkedInWindow(url, anchorWindowId) {
 
   try {
     const anchor = await resolveAnchorWindow(anchorWindowId);
-    bounds = await layoutBesideCalendar(anchor);
+    bounds = await layoutBesideHost(anchor);
   } catch (err) {
     console.debug("[CLI] layout", err);
   }
@@ -213,7 +243,7 @@ chrome.windows.onRemoved.addListener(async (windowId) => {
   const stored = await chrome.storage.session.get(LINKEDIN_WINDOW_KEY);
   if (stored[LINKEDIN_WINDOW_KEY] === windowId) {
     await chrome.storage.session.remove(LINKEDIN_WINDOW_KEY);
-    await restoreCalendarWindow();
+    await restoreHostWindow();
   }
 });
 

@@ -1,14 +1,21 @@
 (() => {
   const features = document.getElementById("features");
+  const appsFieldset = document.getElementById("apps");
   const enabled = document.getElementById("enabled");
   const status = document.getElementById("status");
   const radios = [...document.querySelectorAll('input[name="clickTarget"]')];
+  const appInputs = [...document.querySelectorAll("input[data-app]")];
 
   function readForm() {
     const selected = radios.find((r) => r.checked);
+    const apps = {};
+    for (const input of appInputs) {
+      apps[input.dataset.app] = input.checked;
+    }
     return {
       enabled: enabled.checked,
       clickTarget: selected?.value === "newTab" ? "newTab" : "sidePanel",
+      apps,
     };
   }
 
@@ -16,7 +23,11 @@
     enabled.checked = Boolean(settings.enabled);
     const target = settings.clickTarget === "newTab" ? "newTab" : "sidePanel";
     for (const radio of radios) radio.checked = radio.value === target;
+    for (const input of appInputs) {
+      input.checked = Boolean(settings.apps?.[input.dataset.app]);
+    }
     features.disabled = !settings.enabled;
+    appsFieldset.disabled = !settings.enabled;
   }
 
   function flash(message) {
@@ -37,5 +48,6 @@
     writeForm(settings);
     enabled.addEventListener("change", persist);
     for (const radio of radios) radio.addEventListener("change", persist);
+    for (const input of appInputs) input.addEventListener("change", persist);
   });
 })();
