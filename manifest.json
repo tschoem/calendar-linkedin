@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Calendar LinkedIn Lookup",
-  "version": "1.6.0",
+  "version": "1.6.2",
   "description": "Adds LinkedIn search icons next to contacts in Google Calendar and HubSpot. Open in a side window or a new tab.",
   "author": "Thomas Schoemaecker",
   "homepage_url": "https://github.com/tschoem/calendar-linkedin",
