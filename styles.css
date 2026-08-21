@@ -27,10 +27,25 @@
   pointer-events: none;
 }
 
-/* Keep icon on the same row as the guest name */
+/* Keep icon on the same row as the guest name (Calendar) */
 .ddPise .cli-linkedin-link,
 .SDqFWd + .cli-linkedin-link,
 .CVKLNd .cli-linkedin-link {
   display: inline-flex !important;
   margin-left: 8px;
+}
+
+/* HubSpot: keep icon inline beside the name / email actions */
+.cli-linkedin-link--hubspot {
+  display: inline-flex !important;
+  margin-left: 6px !important;
+  margin-right: 0 !important;
+  vertical-align: middle !important;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+[data-cli-hubspot-card] .cli-linkedin-link--hubspot {
+  position: relative;
+  top: -1px;
 }

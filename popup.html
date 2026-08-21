@@ -10,18 +10,38 @@
     <header>
       <img src="icons/icon48.png" alt="" width="28" height="28" />
       <div>
-        <h1>Calendar LinkedIn</h1>
-        <p>Click behavior</p>
+        <h1>LinkedIn Lookup</h1>
+        <p>Contacts → LinkedIn search</p>
       </div>
     </header>
 
     <label class="row master">
       <div>
         <strong>Enable extension</strong>
-        <span>Show LinkedIn icons next to Calendar contacts</span>
+        <span>Master switch for LinkedIn icons</span>
       </div>
       <input type="checkbox" id="enabled" />
     </label>
+
+    <fieldset id="apps">
+      <legend>Apps</legend>
+
+      <label class="row">
+        <div>
+          <strong>Google Calendar</strong>
+          <span>Icons next to event guests</span>
+        </div>
+        <input type="checkbox" id="app-calendar" data-app="calendar" />
+      </label>
+
+      <label class="row">
+        <div>
+          <strong>HubSpot</strong>
+          <span>Icons on contact cards and lists</span>
+        </div>
+        <input type="checkbox" id="app-hubspot" data-app="hubspot" />
+      </label>
+    </fieldset>
 
     <fieldset id="features">
       <legend>On icon click</legend>
@@ -29,7 +49,7 @@
       <label class="row">
         <div>
           <strong>Side window</strong>
-          <span>Resize Calendar and open LinkedIn beside it</span>
+          <span>Resize the app and open LinkedIn beside it</span>
         </div>
         <input type="radio" name="clickTarget" value="sidePanel" />
       </label>

@@ -2,4 +2,3 @@
 *.crx
 *.pem
 node_modules/
-gh-cli
